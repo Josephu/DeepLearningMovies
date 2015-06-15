@@ -21,13 +21,20 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import pandas as pd
 import numpy as np
 
+GO_FOR_REAL = True
+
 def main():
     start_time = datetime.now()
 
     df = pd.read_csv(os.path.join(os.path.dirname(__file__), 'data', 'labeledTrainData.tsv'), header=0, delimiter="\t", quoting=3)
-    # test = pd.read_csv(os.path.join(os.path.dirname(__file__), 'data', 'testData.tsv'), header=0, delimiter="\t", \
-    #                quoting=3 )
-    train, test, train_sentiment, test_sentiment = cross_validation.train_test_split(df['review'].values, df['sentiment'].values, test_size=0.4, random_state=0)
+    if GO_FOR_REAL:
+        test = pd.read_csv(os.path.join(os.path.dirname(__file__), 'data', 'testData.tsv'), header=0, delimiter="\t", quoting=3 )
+        train = df['review']
+        train_sentiment = df['sentiment']
+        test_id = test['id'].str.replace('"', '')
+        test = test['review']
+    else:
+        train, test, train_sentiment, test_sentiment = cross_validation.train_test_split(df['review'].values, df['sentiment'].values, test_size=0.4, random_state=0)
 
     print 'Download text data sets. If you already have NLTK datasets downloaded, just close the Python download window...'
     #nltk.download()  # Download text data sets, including stop words
@@ -82,7 +89,7 @@ def main():
     # Initialize a Random Forest classifier with 100 trees
     # clf = RandomForestClassifier(n_estimators=100)
     # clf = svm.LinearSVC(C=1)
-    clf = LogisticRegressionCV(cv=3, scoring='roc_auc', solver='liblinear')
+    clf = LogisticRegressionCV(cv=3, scoring='roc_auc', solver='liblinear', Cs=[3, 4, 5, 6, 7])
 
     # Cross validation, this takes a long time ...
     # print "4 Fold CV Score: ", np.mean(cross_validation.cross_val_score(clf, train_data_features, train_sentiment, cv=4, scoring='accuracy', n_jobs=4))
@@ -106,16 +113,20 @@ def main():
 
     # Use svc to make sentiment label predictions
     print "Predicting test labels...\n"
-    result = model.predict(test_data_features)
 
     # Copy the results to a pandas dataframe with an "id" column and
     # a "sentiment" column
-    output = pd.DataFrame(data={"sentiment":test_sentiment, "predict_sentiment":result})
-    output['succeed'] = output['sentiment'] == output['predict_sentiment']
+    if GO_FOR_REAL:
+        result = model.predict_proba(test_data_features)[:, 1] # predict as probability
+        output = pd.DataFrame(data={"id": test_id, "sentiment":result})
+    else:
+        result = model.predict(test_data_features)
+        output = pd.DataFrame(data={"sentiment":test_sentiment, "predict_sentiment":result})
+        output['succeed'] = output['sentiment'] == output['predict_sentiment']
 
-    groupby = output.groupby('succeed')
-    print 'Result Evaluation'
-    print groupby['sentiment'].agg(['count'])
+        groupby = output.groupby('succeed')
+        print 'Result Evaluation'
+        print groupby['sentiment'].agg(['count'])
 
     # Use pandas to write the comma-separated output file
     output.to_csv(os.path.join(os.path.dirname(__file__), 'data', 'Bag_of_Words_model.csv'), index=False, quoting=csv.QUOTE_MINIMAL)
